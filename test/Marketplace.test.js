@@ -97,4 +97,49 @@ describe("Marketplace", function () {
     expect(await marketplace.getSellerItemIds(seller.address)).to.deep.equal([1n]);
     await expect(marketplace.getItem(999)).to.be.revertedWithCustomError(marketplace, "ItemNotFound");
   });
+  it("rejects buying zero units and buying unknown items", async function () {
+    await list();
+    await expect(marketplace.connect(buyer).buyItem(1, 0, { value: 0 }))
+      .to.be.revertedWithCustomError(marketplace, "InvalidQuantity");
+    await expect(marketplace.connect(buyer).buyItem(999, 1, { value: price }))
+      .to.be.revertedWithCustomError(marketplace, "ItemNotFound");
+  });
+
+  it("rejects withdrawing when there is nothing to withdraw", async function () {
+    await expect(marketplace.connect(seller).withdrawProceeds())
+      .to.be.revertedWithCustomError(marketplace, "NothingToWithdraw");
+  });
+
+  it("does not allow updating or re-deleting a deleted listing", async function () {
+    await list();
+    await marketplace.connect(seller).deleteItem(1);
+    await expect(marketplace.connect(seller).updateItem(1, "Again", "desc", price, 2, zeroHash))
+      .to.be.revertedWithCustomError(marketplace, "ItemInactive");
+    await expect(marketplace.connect(seller).deleteItem(1))
+      .to.be.revertedWithCustomError(marketplace, "ItemInactive");
+  });
+
+  it("lets the seller restock a sold-out listing", async function () {
+    await list(1);
+    await marketplace.connect(buyer).buyItem(1, 1, { value: price });
+    expect((await marketplace.getItem(1)).active).to.equal(false);
+    await expect(marketplace.connect(seller).updateItem(1, "Notebook", "restocked", price, 5, zeroHash))
+      .to.emit(marketplace, "ItemUpdated").withArgs(1, "Notebook", price, 5, true);
+    const item = await marketplace.getItem(1);
+    expect(item.active).to.equal(true);
+    expect(item.quantity).to.equal(5);
+    await marketplace.connect(other).buyItem(1, 2, { value: price * 2n });
+    expect((await marketplace.getItem(1)).quantity).to.equal(3);
+  });
+
+  it("accumulates proceeds across purchases and resets after withdrawal", async function () {
+    await list(3);
+    await marketplace.connect(buyer).buyItem(1, 1, { value: price });
+    await marketplace.connect(other).buyItem(1, 2, { value: price * 2n });
+    expect(await marketplace.pendingProceeds(seller.address)).to.equal(price * 3n);
+    await expect(marketplace.connect(seller).withdrawProceeds())
+      .to.emit(marketplace, "ProceedsWithdrawn").withArgs(seller.address, price * 3n);
+    await expect(marketplace.connect(seller).withdrawProceeds())
+      .to.be.revertedWithCustomError(marketplace, "NothingToWithdraw");
+  });
 });
