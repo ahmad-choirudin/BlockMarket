@@ -89,6 +89,8 @@ contract Marketplace {
     }
 
     /// @notice Update a listing. Setting quantity to zero is not allowed; use deleteItem to deactivate it.
+    /// @dev A sold-out listing (quantity 0) can be restocked and is reactivated by this call.
+    ///      A listing deactivated with deleteItem cannot be updated.
     function updateItem(
         uint256 itemId,
         string calldata name,
@@ -102,13 +104,15 @@ contract Marketplace {
         if (quantity == 0) revert InvalidQuantity();
 
         Item storage item = items[itemId];
-        if (!item.active) revert ItemInactive(itemId);
+        // Inactive with remaining stock means the seller deleted it; inactive with zero stock means sold out.
+        if (!item.active && item.quantity != 0) revert ItemInactive(itemId);
         item.name = name;
         item.description = description;
         item.price = price;
         item.quantity = quantity;
+        item.active = true;
         item.metadataHash = metadataHash;
-        emit ItemUpdated(itemId, name, price, quantity, item.active);
+        emit ItemUpdated(itemId, name, price, quantity, true);
     }
 
     /// @notice Deactivate a listing. Historical item data remains available on-chain.
@@ -126,7 +130,8 @@ contract Marketplace {
         if (item.id == 0) revert ItemNotFound(itemId);
         if (!item.active) revert ItemInactive(itemId);
         if (msg.sender == item.seller) revert CannotBuyOwnItem();
-        if (quantity == 0 || quantity > item.quantity) revert OutOfStock(itemId);
+        if (quantity == 0) revert InvalidQuantity();
+        if (quantity > item.quantity) revert OutOfStock(itemId);
 
         uint256 totalPrice = item.price * quantity;
         if (msg.value != totalPrice) revert IncorrectPayment(totalPrice, msg.value);
