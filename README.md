@@ -7,7 +7,7 @@ BlockMarket is a learning project that demonstrates a peer-to-peer marketplace i
 ## Features
 
 - List items with a name, description, unit price, quantity, seller address, active flag, and optional `bytes32` metadata hash.
-- Update or deactivate listings; only the original seller may do so.
+- Update or deactivate listings; only the original seller may do so. A sold-out listing can be restocked with `updateItem`, which reactivates it; a listing removed with `deleteItem` stays deactivated.
 - Purchase one or more units with exact payment.
 - Reject invalid names, zero prices/quantities, incorrect payments, inactive listings, out-of-stock purchases, and self-purchases.
 - Emit events for listing, update, deletion, purchase, and withdrawals.
@@ -19,9 +19,10 @@ BlockMarket is a learning project that demonstrates a peer-to-peer marketplace i
 
 ```text
 contracts/Marketplace.sol   Solidity smart contract
- test/Marketplace.test.js   Automated contract tests
+test/Marketplace.test.js    Automated contract tests
 hardhat.config.js           Hardhat configuration
 package.json                Dependencies and scripts
+.gitignore                  Ignored build output and dependencies
 ```
 
 ## Requirements
@@ -115,6 +116,8 @@ await marketplace.connect(seller).withdrawProceeds();
 - `storage` is used for persistent item records; calldata is used for external function inputs; returned structs are copied to memory.
 - `address`, `uint256`, `bool`, `string`, and `bytes32` represent seller, prices/quantities, status, text, and optional metadata digest.
 - Custom errors make failure cases explicit.
+- There is no escrow or refund: payment is credited to the seller immediately, so buyers have no recourse if an item is not delivered.
+- A seller can buy from their own listing through a second address, so `totalSales` and `totalVolume` are not reliable as anti-fraud metrics.
 - Deleting a listing marks it inactive instead of erasing historical blockchain data.
 - The contract accepts exact native-currency payment. It does not integrate ERC-20 tokens or an external payment gateway.
 - `owner` is initialized in the constructor for demonstrating constructor state; no privileged owner-only operation is currently required.
